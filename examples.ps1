@@ -20,13 +20,21 @@ if (-not (Test-DiscoveryServices -Server $DiscoveryServer -IgnoreCertificate)) {
 Measure-DiscoveryServicesRecord -Server $DiscoveryServer -IgnoreCertificate
 
 # Get the OS version of the first record that can be returned
-(Get-DiscoveryServicesItem -Server $DiscoveryServer -QueryParameters '$top=1' -IgnoreCertificate).value.OS.Version
+(Get-DiscoveryServicesItem -Server $DiscoveryServer -QueryParameters '$top=1' -IgnoreCertificate).OS.Version
 
 # Return the count of items who have a device name that starts with a D
-(Get-DiscoveryServicesItem -Server $DiscoveryServer -QueryParameters "`$filter=(startswith(DeviceName, 'D'))")."@odata.count"
+(Get-DiscoveryServicesItem -Server $DiscoveryServer -QueryParameters "`$filter=(startswith(DeviceName, 'D'))").Length
 
 # Return the DeviceName and OS Name of items who have a device name that starts with a D
 (Get-DiscoveryServicesItem -Server $DiscoveryServer -QueryParameters "`$filter=(startswith(DeviceName, 'D'))&`$select=DeviceName,OS.Name")
+
+# Return the DeviceName and OS Name of items who have a device name that starts with a D but in a paged fashion
+$p1 = Get-DiscoveryServicesItem -Server $DiscoveryServer -QueryParameters "`$filter=(startswith(DeviceName, 'D'))&`$select=DeviceName,OS.Name" -Paged
+$p1
+$p1.value | ft -AutoSize
+
+# Return the next page from the query above
+(Step-DiscoveryServicesItem -StepLink $p1.'@odata.nextLink' -IgnoreCertificate).value
 
 # Return the DeviceName and OS Name of items who have a device name that starts with a D and have Mac in the OS Name
 (Get-DiscoveryServicesItem -Server $DiscoveryServer -QueryParameters "`$filter=(startswith(DeviceName, 'D') and contains(OS.Name, 'Mac'))&`$select=DeviceName,OS.Name")
@@ -50,3 +58,6 @@ Export-DiscoveryServicesItem -Server $DiscoveryServer -Query '$colset=all&$top=1
 
 # Export default fields, for all records, but do not combine the returned pages and change the file prefix from the default
 Export-DiscoveryServicesItem -Server $DiscoveryServer -Query '$colset=default' -OutputFolder "$env:UserProfile\Desktop\results" -Paged -IgnoreCertificate
+
+# Export default fields, for all records and combine into the specified file
+Export-DiscoveryServicesItem -Server $DiscoveryServer -Query '$colset=default' -OutputFile "$env:UserProfile\Desktop\results.json" -IgnoreCertificate

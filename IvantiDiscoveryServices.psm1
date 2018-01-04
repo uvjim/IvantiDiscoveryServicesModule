@@ -365,11 +365,15 @@ function Measure-DiscoveryServicesRecord {
     .Parameter QueryParameters
     Additional filter and select parameters to send to the Discovery Server
 
+    .Parameter Paged
+    When provided the results will not be consolidated into a single object
+
     .Parameter IgnoreCertificate
     When provided the certificate chain will for the Discovery Server will not be validated
 
     .Outputs
-    [System.Collections.Generic.Dictionary]
+    [System.Collections.Generic.Dictionary] - When the Paged parameter is provided the return will be the object returned from the Discovery Services API
+    [System.Collections.Generic.Dictionary][] - When the Paged parameter is not provided the return is all values that are returned from the Discovery Services server
 #>
 function Get-DiscoveryServicesItem {
     [CmdletBinding()]
@@ -383,17 +387,32 @@ function Get-DiscoveryServicesItem {
         [Parameter(Mandatory=$false)]
         [string]$QueryParameters = [string]::Empty,
 
+        [Parameter(Mandatory=$false, ParameterSetName='Paged')]
+        [switch]$Paged,
+
         [Parameter(Mandatory=$false)]
         [switch]$IgnoreCertificate
     )
 
     Begin {
         Write-Debug -Message "Begin $($MyInvocation.MyCommand.Name)"
+        $ret = $false
     }
     Process {
         try {
             $QueryURL = "https://$Server/discovery/api/v1/$Index{0}" -f $(if ($QueryParameters) { "?$QueryParameters" } else { "" } )
-            $ret = Invoke-DSRequest -Uri $QueryURL -IgnoreCertificate:$IgnoreCertificate.IsPresent
+            $res = Invoke-DSRequest -Uri $QueryURL -IgnoreCertificate:$IgnoreCertificate.IsPresent
+            if ($PSCmdlet.ParameterSetName -eq 'Paged') {
+                $ret = $res
+            } else {
+                $ret = @()
+                do {
+                    $ret += $res.value
+                    if ($res."@odata.nextLink") {
+                        $res = Step-DiscoveryServicesItem -StepLink $res."@odata.nextLink" -IgnoreCertificate:$IgnoreCertificate.IsPresent
+                    }
+                } until (-not $res."@odata.nextLink")
+            }
         } catch {
             throw $_
         }
@@ -519,15 +538,18 @@ function Export-DiscoveryServicesItem {
             New-Item -ItemType Directory -Path $script:TempPath -Force | Out-Null
             Write-Progress -Id $progressId -Activity $progressActivity -Status "Retrieving page $i" -PercentComplete $percentComplete -CurrentOperation "$percentComplete% complete"
             do {
+                Write-Debug -Message "$($MyInvocation.MyCommand.Name): Retrieving page $i"
                 if ($i -eq 1) {
-                    $res = Get-DiscoveryServicesItem -Server $Server -QueryParameters $Query -IgnoreCertificate:$IgnoreCertificate.IsPresent
+                    $res = Get-DiscoveryServicesItem -Server $Server -QueryParameters $Query -IgnoreCertificate:$IgnoreCertificate.IsPresent -Paged
                     if (-not $res) { throw $Error[0].Exception }
                     $total = $res."@odata.count"
                 } else {
                     $res = Step-DiscoveryServicesItem -StepLink $nextURL -IgnoreCertificate:$IgnoreCertificate.IsPresent
                     if (-not $res) { throw $Error[0].Exception }
                 }
-                ConvertTo-Json -InputObject $res.value | Out-File -FilePath "$script:TempPath\$FilePrefix$i.json"
+                if ($res.value) {
+                    ConvertTo-Json -InputObject $res.value | Out-File -FilePath "$script:TempPath\$FilePrefix$i.json"
+                }
                 $running_total += $res.value.length
                 if ($res."@odata.nextLink") {
                     $nextURL = $res."@odata.nextLink"

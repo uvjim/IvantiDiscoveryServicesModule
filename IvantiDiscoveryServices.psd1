@@ -1,6 +1,6 @@
 @{
     RootModule = 'IvantiDiscoveryServices'
-    ModuleVersion = '2017.12.20.0'
+    ModuleVersion = '2017.01.04.0'
     GUID = '09f4a591-063a-4ea4-adc8-8991c1092748'
     Author = 'James Simpson'
     CompanyName = 'uvjim'
